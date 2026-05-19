@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gasboy Migration Dashboard</title>
+<style>
+  :root {
+    --walmart-blue:#0071CE; --walmart-yellow:#FFC220;
+    --completed:#22c55e; --in-progress:#f59e0b;
+    --blocked:#ef4444; --pending:#94a3b8;
+    --bg:#f1f5f9; --text:#1e293b; --border:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+  .header{background:linear-gradient(135deg,#0071CE,#005ca5);color:#fff;
+    padding:20px 32px;display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 2px 12px rgba(0,113,206,.25)}
+  .header h1{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+  .header p{font-size:.82rem;opacity:.85;margin-top:3px}
+  .sync-badge{background:rgba(255,255,255,.15);border-radius:20px;
+    padding:4px 12px;font-size:.75rem;margin-top:6px;display:inline-block}
+
+  .stats-bar{display:flex;gap:16px;padding:20px 32px;flex-wrap:wrap;
+    background:#fff;border-bottom:1px solid var(--border)}
+  .stat-card{background:var(--bg);border-radius:10px;padding:12px 20px;
+    min-width:120px;text-align:center;border:1px solid var(--border);transition:transform .15s,
+    box-shadow .15s,border-color .15s;cursor:pointer;user-select:none}
+  .stat-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+  .stat-card.active{border-color:var(--walmart-blue);box-shadow:0 0 0 2px rgba(0,113,206,.25);
+    transform:translateY(-2px)}
+  .stat-card .num{font-size:1.8rem;font-weight:800;line-height:1}
+  .stat-card .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-top:3px}
+  .total .num{color:var(--walmart-blue)} .done .num{color:var(--completed)}
+  .inprog .num{color:var(--in-progress)} .blkd .num{color:var(--blocked)}
+  .pend .num{color:var(--pending)}
+
+  .progress-wrap{flex:1;min-width:200px;padding-left:8px;display:flex;align-items:center}
+  .progress-inner{flex:1}
+  .progress-lbl{font-size:.8rem;color:#64748b;margin-bottom:4px}
+  .progress-pct{font-weight:700;color:var(--walmart-blue)}
+  .progress-track{background:#e2e8f0;border-radius:99px;height:6px}
+  .progress-fill{height:6px;border-radius:99px;background:linear-gradient(90deg,#0071CE,#22c55e);transition:width .4s}
+
+  .toolbar{display:flex;gap:12px;padding:14px 32px;flex-wrap:wrap;align-items:center;
+    background:#fff;border-bottom:1px solid var(--border);
+    position:sticky;top:0;z-index:20;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+  .toolbar input,.toolbar select{padding:8px 14px;border:1.5px solid var(--border);
+    border-radius:8px;font-size:.88rem;outline:none;background:var(--bg);transition:border-color .2s}
+  .toolbar input:focus,.toolbar select:focus{border-color:var(--walmart-blue);background:#fff}
+  .toolbar input{width:250px}
+  .btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;
+    font-size:.85rem;font-weight:600;transition:all .15s}
+  .btn-primary{background:var(--walmart-blue);color:#fff}
+  .btn-primary:hover{background:#005ca5}
+  .btn-success{background:var(--completed);color:#fff}
+  .btn-success:hover{background:#16a34a}
+  .btn-outline{background:#fff;color:var(--text);border:1.5px solid var(--border)}
+  .btn-outline:hover{border-color:var(--walmart-blue);color:var(--walmart-blue)}
+  .ml-auto{margin-left:auto;display:flex;gap:8px}
+
+  .table-wrap{padding:20px 32px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;
+    overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.08);font-size:.87rem}
+  thead th{background:var(--walmart-blue);color:#fff;padding:12px 14px;text-align:left;
+    font-weight:600;font-size:.77rem;text-transform:uppercase;letter-spacing:.04em;
+    cursor:pointer;user-select:none;white-space:nowrap}
+  thead th:hover{background:#005ca5}
+  thead th.asc::after{content:' ▲';opacity:.8}
+  thead th.desc::after{content:' ▼';opacity:.8}
+  tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+  tbody tr:last-child{border-bottom:none}
+  tbody tr:hover{background:#f8faff}
+  td{padding:10px 14px;vertical-align:middle}
+  td.loc{font-weight:600} td.num{font-weight:700;color:var(--walmart-blue);font-size:.92rem}
+  td.date-col{white-space:nowrap;font-size:.88rem;color:#334155;font-weight:500}
+  td[contenteditable]{cursor:text;outline:none;border-radius:4px}
+  td[contenteditable]:focus{background:#eff6ff;box-shadow:inset 0 0 0 2px var(--walmart-blue)}
+
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;
+    font-size:.74rem;font-weight:600;white-space:nowrap;max-width:220px;
+    overflow:hidden;text-overflow:ellipsis}
+  .b-completed{background:#dcfce7;color:#15803d}
+  .b-inprogress{background:#fef9c3;color:#854d0e}
+  .b-blocked{background:#fee2e2;color:#991b1b}
+  .b-pending{background:#f1f5f9;color:#475569}
+  .b-planned{background:#dbeafe;color:#1d4ed8}
+  .b-empty{background:#f8fafc;color:#94a3b8}
+
+  .mig-select{border:none;background:transparent;font-size:.74rem;font-weight:600;
+    cursor:pointer;outline:none;padding:3px 8px;border-radius:20px;
+    appearance:none;-webkit-appearance:none;min-width:108px}
+
+  .row-actions{display:flex;gap:5px;opacity:0;transition:opacity .15s}
+  tbody tr:hover .row-actions{opacity:1}
+  .del-btn{padding:3px 8px;border-radius:5px;border:none;cursor:pointer;
+    font-size:.7rem;font-weight:600;background:#fee2e2;color:#991b1b}
+  .del-btn:hover{background:#fca5a5}
+
+  .add-bar{display:flex;align-items:center;gap:10px;padding:12px 32px;
+    border-top:1px dashed var(--border);background:#fff;flex-wrap:wrap}
+  .add-bar input,.add-bar select{padding:6px 11px;border:1.5px solid var(--border);
+    border-radius:7px;font-size:.84rem;outline:none}
+  .add-bar input:focus,.add-bar select:focus{border-color:var(--walmart-blue)}
+
+  .footer{text-align:center;padding:16px;color:#94a3b8;font-size:.76rem;
+    border-top:1px solid var(--border);background:#fff;margin-top:8px}
+
+  #toast{position:fixed;bottom:24px;right:24px;background:#1e293b;color:#fff;
+    padding:11px 18px;border-radius:10px;font-size:.86rem;font-weight:500;
+    opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;
+    z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+  #toast.show{opacity:1;transform:translateY(0)}
+
+  th:first-child,td:first-child{width:34px;text-align:center;padding:10px 6px}
+  @media(max-width:900px){
+    .header,.stats-bar,.toolbar,.table-wrap,.add-bar{padding-left:16px;padding-right:16px}
+    .toolbar input{width:180px}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>⛽ Gasboy Migration Dashboard</h1>
+    <p>DC Site Migration Status Tracker &nbsp;·&nbsp; Walmart Fuel Operations</p>
+    <span class="sync-badge">🔄 Auto-synced from OneDrive &nbsp;·&nbsp; Last built: 2026-05-19 20:44</span>
+  </div>
+  <div style="font-size:2.2rem">🟡</div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card total" onclick="filterByStatus('')" title="Show all sites"><div class="num" id="sTotal">0</div><div class="lbl">Total Sites</div></div>
+  <div class="stat-card done"  onclick="filterByStatus('Completed')" title="Filter: Completed"><div class="num" id="sDone">0</div><div class="lbl">Completed</div></div>
+  <div class="stat-card inprog" onclick="filterByStatus('Ready to Plan')" title="Filter: Ready to Plan"><div class="num" id="sInProg">0</div><div class="lbl">Ready to Plan</div></div>
+  <div class="stat-card blkd"  onclick="filterByStatus('Yet to Start')" title="Filter: Yet to Start"><div class="num" id="sBlocked">0</div><div class="lbl">Yet to Start</div></div>
+  <div class="stat-card pend"  onclick="filterByStatus('Re-structure')" title="Filter: Re-structure"><div class="num" id="sPending">0</div><div class="lbl">Re-structure</div></div>
+  <div class="stat-card" style="background:var(--bg);border-radius:10px;padding:12px 20px;min-width:120px;text-align:center;border:1px solid var(--border);"
+       onclick="filterByStatus('Schedule Walkthrough')" title="Filter: Schedule Walkthrough">
+    <div class="num" id="sSchedWalk" style="color:#0891b2;">0</div>
+    <div class="lbl">Schedule Walkthrough</div>
+  </div>
+  <div class="progress-wrap" style="flex-direction:column;gap:8px;align-items:stretch;">
+    <div class="progress-inner">
+      <div class="progress-lbl">Migration Complete &nbsp;<span class="progress-pct" id="pPct">0%</span></div>
+      <div class="progress-track"><div class="progress-fill" id="pBar" style="width:0%"></div></div>
+    </div>
+    <div class="progress-inner">
+      <div class="progress-lbl" style="color:#7c3aed;">Cambium Complete &nbsp;<span class="progress-pct" style="color:#7c3aed;" id="cPct">0%</span></div>
+      <div class="progress-track"><div class="progress-fill" id="cBar" style="width:0%;background:linear-gradient(90deg,#7c3aed,#a78bfa);"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="qSearch" placeholder="🔍  Search location, DC #, status…" oninput="applyFilters()">
+  <select id="fMig" onchange="applyFilters()">
+    <option value="">All Migration Status</option>
+    <option>Completed</option>
+    <option>In Progress</option>
+    <option>Yet to Start</option>
+    <option>Re-structure</option>
+    <option>Ready to Plan</option>
+    <option>Schedule Walkthrough</option>
+  </select>
+  <select id="fCab" onchange="applyFilters()">
+    <option value="">All Cabling</option>
+    <option value="Completed">Completed</option>
+    <option value="blocked">Blocked / Issue</option>
+    <option value="conduit">Conduit Issue</option>
+  </select>
+  <div class="ml-auto">
+    <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+    <button class="btn btn-success" onclick="exportCSV()">⬇ CSV</button>
+    <button class="btn btn-primary" onclick="saveLocal()">💾 Save</button>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th><input type="checkbox" id="chkAll" onchange="toggleAll(this)"></th>
+    <th onclick="sortBy('dc_location')">DC Location</th>
+    <th onclick="sortBy('dc_number')">DC #</th>
+    <th onclick="sortBy('cabling')">Cabling</th>
+    <th onclick="sortBy('walkthrough')">Walk Through</th>
+    <th onclick="sortBy('electrical')">Electrical</th>
+    <th onclick="sortBy('cambium')">Cambium</th>
+    <th onclick="sortBy('migration')">Migration</th>
+    <th onclick="sortBy('date')">Date</th>
+    <th onclick="sortBy('comments')">Comments</th>
+    <th>Actions</th>
+  </tr></thead>
+  <tbody id="tBody"></tbody>
+</table>
+</div>
+
+<div class="add-bar">
+  <b style="font-size:.85rem;color:#64748b">➕ Add:</b>
+  <input id="nLoc"  placeholder="DC Location" style="width:140px">
+  <input id="nNum"  placeholder="DC #"        style="width:90px">
+  <select id="nMig">
+    <option value="">-- Migration --</option>
+    <option>Completed</option><option>In Progress</option>
+    <option>Yet to Start</option><option>Re-structure</option>
+    <option>Ready to Plan</option><option>Schedule Walkthrough</option>
+  </select>
+  <input id="nDate" placeholder="mmm-yy" style="width:90px">
+  <input id="nCmt"  placeholder="Comments" style="width:180px">
+  <button class="btn btn-primary" onclick="addRow()">Add Row</button>
+</div>
+
+<div class="footer">
+  ⛽ Gasboy / QuikQ Migration Tracker &nbsp;·&nbsp;
+  <span id="rowCount"></span> &nbsp;·&nbsp;
+  Auto-synced from OneDrive every 30 min
+</div>
+<div id="toast"></div>
+
+<script>
+let data = [
+    {
+        "dc_location": "Cullman AL",
+        "dc_number": "6006",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Mt Pleasant IA",
+        "dc_number": "6009",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Mar-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Douglas GA",
+        "dc_number": "6010",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Brookhaven MS",
+        "dc_number": "6011",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Feb-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Plainview TX",
+        "dc_number": "6012",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Laurens SC",
+        "dc_number": "6014",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "New Braunfels TX",
+        "dc_number": "6016",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Seymour IN",
+        "dc_number": "6017",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Searcy AR",
+        "dc_number": "6018",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Aug-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Loveland CO",
+        "dc_number": "6019",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for May"
+    },
+    {
+        "dc_location": "Brooksville FL",
+        "dc_number": "6020",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Feb-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Porterville CA",
+        "dc_number": "6021",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Greencastle IN",
+        "dc_number": "6022",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Sutherland VA",
+        "dc_number": "6023",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Grove City OH",
+        "dc_number": "6024",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Schedule Walkthrough",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for March"
+    },
+    {
+        "dc_location": "Menomonie WI",
+        "dc_number": "6025",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Red Bluff CA",
+        "dc_number": "6026",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Planned for Feb"
+    },
+    {
+        "dc_location": "Woodland PA",
+        "dc_number": "6027",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Planned for March"
+    },
+    {
+        "dc_location": "Hurricane UT",
+        "dc_number": "6029",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Raymond NH",
+        "dc_number": "6030",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Buckeye AZ",
+        "dc_number": "6031",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Ottawa KS",
+        "dc_number": "6035",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Palestine TX",
+        "dc_number": "6036",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Jan-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Hermiston OR",
+        "dc_number": "6037",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jan-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Marcy NY",
+        "dc_number": "6038",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Feb-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Midway TN",
+        "dc_number": "6039",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Sep-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Hope Mills NC",
+        "dc_number": "6040",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Pauls Valley OK",
+        "dc_number": "6042",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Oct-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Coldwater MI",
+        "dc_number": "6043",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Bedford PA",
+        "dc_number": "6047",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Opelousas LA",
+        "dc_number": "6048",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "LaGrange GA",
+        "dc_number": "6054",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Monroe GA",
+        "dc_number": "6055",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Terrell TX",
+        "dc_number": "6056",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Sep-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Robert LA",
+        "dc_number": "6057",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Olney IL",
+        "dc_number": "6059",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for June"
+    },
+    {
+        "dc_location": "Shelbyville TN",
+        "dc_number": "6062",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Cleburne TX",
+        "dc_number": "6064",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Harrisonville MO",
+        "dc_number": "6065",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for June"
+    },
+    {
+        "dc_location": "Hopkinsville KY",
+        "dc_number": "6066",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for May"
+    },
+    {
+        "dc_location": "Sanger TX",
+        "dc_number": "6068",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jan-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "St James MO",
+        "dc_number": "6069",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for June"
+    },
+    {
+        "dc_location": "Shelby NC",
+        "dc_number": "6070",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Apr-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Winter Haven FL",
+        "dc_number": "6071",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "New Albany MS",
+        "dc_number": "6072",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Pageland SC",
+        "dc_number": "6073",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Mar-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Auburn IN",
+        "dc_number": "6074",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Re-structure",
+        "comments": "",
+        "date": "",
+        "notes": "Will be a part of restructure, double confirm"
+    },
+    {
+        "dc_location": "Moberly MO",
+        "dc_number": "6077",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "24-Jun",
+        "notes": ""
+    },
+    {
+        "dc_location": "Tobyhanna PA",
+        "dc_number": "6080",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Mar-2026",
+        "notes": ""
+    },
+    {
+        "dc_location": "Clarksville AR",
+        "dc_number": "6082",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Temple TX",
+        "dc_number": "6083",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Los Lunas NM",
+        "dc_number": "6084",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Tomah WI",
+        "dc_number": "6085",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Corinne UT",
+        "dc_number": "6090",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Aug-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Henderson NC",
+        "dc_number": "6091",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Spring Valley IL",
+        "dc_number": "6092",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Schedule Walkthrough",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for April"
+    },
+    {
+        "dc_location": "Bentonville AR",
+        "dc_number": "6094",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Aug-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Opelika AL",
+        "dc_number": "6095",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Johnstown NY",
+        "dc_number": "6096",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Sep-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "London KY",
+        "dc_number": "6097",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "MacClenny FL",
+        "dc_number": "6099",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Planned for Jan"
+    },
+    {
+        "dc_location": "Mebane NC",
+        "dc_number": "6858",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2022",
+        "notes": ""
+    },
+    {
+        "dc_location": "New Caney TX",
+        "dc_number": "7010",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Aug-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Washington Court House OH",
+        "dc_number": "7012",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Ready to Plan",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for April"
+    },
+    {
+        "dc_location": "Casa Grande AZ",
+        "dc_number": "7013",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Lewiston ME",
+        "dc_number": "7014",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "May-2026",
+        "notes": "Planned for March"
+    },
+    {
+        "dc_location": "Ochelata OK",
+        "dc_number": "7015",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Gordonsville VA",
+        "dc_number": "7016",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Wintersville OH",
+        "dc_number": "7017",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Walthrough scheduled for 2/27"
+    },
+    {
+        "dc_location": "North Platte NE",
+        "dc_number": "7018",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "",
+        "migration": "Yet to Start",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for May"
+    },
+    {
+        "dc_location": "Brundidge AL",
+        "dc_number": "7019",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Grandview WA",
+        "dc_number": "7021",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Re-structure",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Site should not need Cambium because conduit will be ran with the remodel."
+    },
+    {
+        "dc_location": "Arcadia FL",
+        "dc_number": "7023",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Sterling IL",
+        "dc_number": "7024",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Schedule Walkthrough",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for April"
+    },
+    {
+        "dc_location": "Grantsville UT",
+        "dc_number": "7026",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Sep-2025",
+        "notes": ""
+    },
+    {
+        "dc_location": "Pottsville PA",
+        "dc_number": "7030",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Re-structure",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Site should not need Cambium because conduit will be ran with the remodel."
+    },
+    {
+        "dc_location": "Apple Valley CA",
+        "dc_number": "7033",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "May-2026",
+        "notes": "Planned for Feb"
+    },
+    {
+        "dc_location": "Smyrna DE",
+        "dc_number": "7034",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Oct-2023",
+        "notes": ""
+    },
+    {
+        "dc_location": "Alachua FL",
+        "dc_number": "7035",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Sealy TX",
+        "dc_number": "7036",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Ruby"
+    },
+    {
+        "dc_location": "Ft Pierce FL",
+        "dc_number": "7038",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "May-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Beaver Dam WI",
+        "dc_number": "7039",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Mt Crawford VA",
+        "dc_number": "7045",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Ready to Plan",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for March"
+    },
+    {
+        "dc_location": "McCarran NV",
+        "dc_number": "7048",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Ready to Plan",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for March"
+    },
+    {
+        "dc_location": "Gas City IN",
+        "dc_number": "7055",
+        "cabling": "",
+        "walkthrough": "",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Schedule Walkthrough",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Planned for April"
+    },
+    {
+        "dc_location": "Cheyenne WY",
+        "dc_number": "7077",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jul-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Mankato MN",
+        "dc_number": "7079",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Re-structure",
+        "comments": "Cambium",
+        "date": "",
+        "notes": "Site should not need Cambium because conduit will be ran with the remodel."
+    },
+    {
+        "dc_location": "Cocoa FL",
+        "dc_number": "8851",
+        "cabling": "Completed",
+        "walkthrough": "Completed",
+        "electrical": "",
+        "cambium": "",
+        "migration": "Completed",
+        "comments": "",
+        "date": "Jun-2024",
+        "notes": ""
+    },
+    {
+        "dc_location": "Shafter CA",
+        "dc_number": "8852",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Planned for Feb"
+    },
+    {
+        "dc_location": "Ft Wayne IN",
+        "dc_number": "7390\n9858",
+        "cabling": "",
+        "walkthrough": "Completed",
+        "electrical": "Completed",
+        "cambium": "Completed",
+        "migration": "Completed",
+        "comments": "Cambium",
+        "date": "Apr-2026",
+        "notes": "Ruby"
+    }
+];
+
+// ─── STATUS HELPERS ────────────────────────────────────────────────────────
+const CLS = {
+  Completed:   { cls:'b-completed',  bg:'#dcfce7', col:'#15803d' },
+  'In Progress':{ cls:'b-inprogress', bg:'#fef9c3', col:'#854d0e' },
+  'Yet to Start':          { cls:'b-blocked',    bg:'#fee2e2', col:'#991b1b' },
+  'Re-structure':          { cls:'b-pending',    bg:'#f1f5f9', col:'#475569' },
+  'Ready to Plan':         { cls:'b-planned',    bg:'#dbeafe', col:'#1d4ed8' },
+  'Schedule Walkthrough':  { cls:'b-sched',      bg:'#cffafe', col:'#0e7490' },
+};
+const MIG_OPTS = ['Completed','In Progress','Yet to Start','Re-structure','Ready to Plan','Schedule Walkthrough'];
+
+function style(val) {
+  return CLS[val] || { cls:'b-empty', bg:'#f8fafc', col:'#94a3b8' };
+}
+
+function cabCls(val) {
+  if (!val) return 'b-empty';
+  const v = val.toLowerCase();
+  if (v === 'completed') return 'b-completed';
+  if (v.includes('partial') || v.includes('progress')) return 'b-inprogress';
+  if (v.includes('block') || v.includes('crush') || v.includes('unable') ||
+      v.includes('conduit') || v.includes('weld') || v.includes('650') ||
+      v.includes('too much') || v.includes('no room') || v.includes('built') ||
+      v.includes('junction') || v.includes('unreachable') || v.includes('wall'))
+    return 'b-blocked';
+  if (v.includes('schedul') || v.includes('plan')) return 'b-planned';
+  return 'b-inprogress';
+}
+
+function migSelect(val, idx) {
+  const s = style(val);
+  const opts = MIG_OPTS.map(o =>
+    `<option value="${o}"${val===o?' selected':''}>${o}</option>`
+  ).join('');
+  return `<select class="mig-select" style="background:${s.bg};color:${s.col};"
+    onchange="onMigChange(${idx},this)">${opts}</select>`;
+}
+
+function cabBadge(val) {
+  const cls = cabCls(val);
+  const label = val || '—';
+  const display = label.length > 36 ? label.slice(0,36)+'…' : label;
+  return `<span class="badge ${cls}" title="${label.replace(/"/g,'&quot;')}">${display}</span>`;
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+function render(list) {
+  const tb = document.getElementById('tBody');
+  if (!list.length) {
+    tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:40px;color:#94a3b8">No results found</td></tr>';
+    document.getElementById('rowCount').textContent='0 sites';
+    return;
+  }
+  tb.innerHTML = list.map(row => {
+    const i = data.indexOf(row);
+    return `<tr>
+      <td><input type="checkbox" ${row._sel?'checked':''} onchange="data[${i}]._sel=this.checked"></td>
+      <td class="loc" contenteditable onblur="setCell(${i},'dc_location',this)">${esc(row.dc_location)}</td>
+      <td class="num" contenteditable onblur="setCell(${i},'dc_number',this)">${esc(row.dc_number)}</td>
+      <td style="max-width:220px">${cabBadge(row.cabling)}</td>
+      <td>${cabBadge(row.walkthrough)}</td>
+      <td>${cabBadge(row.electrical)}</td>
+      <td>${cabBadge(row.cambium)}</td>
+      <td>${migSelect(row.migration, i)}</td>
+      <td class="date-col" contenteditable onblur="setCell(${i},'date',this)">${esc(row.date)}</td>
+      <td contenteditable style="min-width:130px;max-width:220px" onblur="setCell(${i},'comments',this)">${esc(row.comments)}</td>
+      <td><div class="row-actions"><button class="del-btn" onclick="delRow(${i})">🗑</button></div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rowCount').textContent = `${list.length} of ${data.length} sites`;
+}
+
+// ─── STATS ─────────────────────────────────────────────────────────────────
+function updateStats() {
+  const t = data.length;
+  const d = data.filter(r=>r.migration==='Completed').length;
+  const p = data.filter(r=>r.migration==='Ready to Plan').length;
+  const b  = data.filter(r=>r.migration==='Yet to Start').length;
+  const n  = data.filter(r=>r.migration==='Re-structure'||!r.migration).length;
+  const sw = data.filter(r=>r.migration==='Schedule Walkthrough').length;
+  document.getElementById('sTotal').textContent    = t;
+  document.getElementById('sDone').textContent     = d;
+  document.getElementById('sInProg').textContent   = p;
+  document.getElementById('sBlocked').textContent  = b;
+  document.getElementById('sPending').textContent  = n;
+  document.getElementById('sSchedWalk').textContent = sw;
+  const pct = t ? Math.round(d/t*100) : 0;
+  document.getElementById('pPct').textContent = pct+'%';
+  document.getElementById('pBar').style.width = pct+'%';
+
+  // Cambium progress — Cambium sites = comments==='Cambium', Completed = cambium==='Completed'
+  const cambiumTotal     = data.filter(r=>r.comments==='Cambium').length;
+  const cambiumCompleted = data.filter(r=>r.comments==='Cambium' && r.cambium==='Completed').length;
+  const cPct = cambiumTotal ? Math.round(cambiumCompleted/cambiumTotal*100) : 0;
+  document.getElementById('cPct').textContent = cPct+'%';
+  document.getElementById('cBar').style.width = cPct+'%';
+}
+
+// ─── FILTER ────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q   = document.getElementById('qSearch').value.toLowerCase();
+  const mig = document.getElementById('fMig').value;
+  const cab = document.getElementById('fCab').value.toLowerCase();
+  render(data.filter(r => {
+    const mq = !q ||
+      (r.dc_location||'').toLowerCase().includes(q) ||
+      (r.dc_number||'').toLowerCase().includes(q)   ||
+      (r.migration||'').toLowerCase().includes(q)   ||
+      (r.cabling||'').toLowerCase().includes(q)     ||
+      (r.date||'').toLowerCase().includes(q)        ||
+      (r.comments||'').toLowerCase().includes(q);
+    const mm = !mig || r.migration === mig;
+    const mc = !cab || (r.cabling||'').toLowerCase().includes(cab);
+    return mq && mm && mc;
+  }));
+}
+
+function clearFilters() {
+  ['qSearch'].forEach(id=>document.getElementById(id).value='');
+  ['fMig','fCab'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  render(data);
+}
+
+function filterByStatus(status) {
+  document.getElementById('qSearch').value = '';
+  document.getElementById('fCab').value = '';
+  document.getElementById('fMig').value = status;
+  // Highlight the active card
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  if(status) event.currentTarget.classList.add('active');
+  applyFilters();
+}
+
+// ─── SORT ──────────────────────────────────────────────────────────────────
+let _sortKey=null, _sortAsc=true;
+function sortBy(key) {
+  document.querySelectorAll('thead th').forEach(th=>th.classList.remove('asc','desc'));
+  _sortAsc = _sortKey===key ? !_sortAsc : true;
+  _sortKey = key;
+  const keyMap=[null,'dc_location','dc_number','cabling','walkthrough','electrical','cambium','migration','date','comments'];
+  const idx=keyMap.indexOf(key);
+  if(idx>-1) document.querySelectorAll('thead th')[idx].classList.add(_sortAsc?'asc':'desc');
+  data.sort((a,b)=>{
+    const av=(a[key]||'').toString().toLowerCase();
+    const bv=(b[key]||'').toString().toLowerCase();
+    return _sortAsc?av.localeCompare(bv):bv.localeCompare(av);
+  });
+  applyFilters();
+}
+
+// ─── EDIT ──────────────────────────────────────────────────────────────────
+function setCell(idx, field, el) {
+  data[idx][field] = el.innerText.trim();
+  updateStats();
+  toast('✏️ Updated ' + (data[idx].dc_location||'row'));
+}
+
+function onMigChange(idx, sel) {
+  data[idx].migration = sel.value;
+  const s = style(sel.value);
+  sel.style.background = s.bg; sel.style.color = s.col;
+  updateStats();
+  toast('✅ ' + (data[idx].dc_location||'row') + ' → ' + sel.value);
+}
+
+// ─── ADD / DELETE ──────────────────────────────────────────────────────────
+function addRow() {
+  const loc=document.getElementById('nLoc').value.trim();
+  const num=document.getElementById('nNum').value.trim();
+  const mig=document.getElementById('nMig').value;
+  const dt =document.getElementById('nDate').value.trim();
+  const cmt=document.getElementById('nCmt').value.trim();
+  if(!loc&&!num){ toast('⚠️ Enter DC Location or Number'); return; }
+  data.unshift({dc_location:loc,dc_number:num,cabling:'',walkthrough:'',electrical:'',cambium:'',migration:mig,date:dt,comments:cmt,notes:''});
+  ['nLoc','nNum','nDate','nCmt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nMig').value='';
+  updateStats(); applyFilters();
+  toast('✅ Added: '+(loc||num));
+}
+
+function delRow(idx) {
+  const name=data[idx].dc_location||data[idx].dc_number||'row';
+  if(!confirm(`Delete "${name}"?`))return;
+  data.splice(idx,1); updateStats(); applyFilters();
+  toast('🗑 Deleted: '+name);
+}
+
+function toggleAll(cb) { data.forEach(r=>r._sel=cb.checked); applyFilters(); }
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const H=['DC Location','DC Number','Cabling','Walk Through','Electrical','Cambium','Migration','Date','Comments'];
+  const K=['dc_location','dc_number','cabling','walkthrough','electrical','cambium','migration','date','comments'];
+  const csv=[H.join(','),...data.map(r=>K.map(k=>`"${(r[k]||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='Gasboy_Migration_Export.csv'; a.click();
+  toast('⬇️ CSV exported');
+}
+
+// ─── SAVE ──────────────────────────────────────────────────────────────────
+function saveLocal() {
+  localStorage.setItem('gasboy_v4',JSON.stringify(data));
+  toast('💾 Saved to browser storage');
+}
+
+// ─── TOAST ─────────────────────────────────────────────────────────────────
+let _tt;
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+localStorage.removeItem('gasboy_v3'); // clear old version
+const saved=localStorage.getItem('gasboy_v4');
+if(saved) data=JSON.parse(saved);
+updateStats(); render(data);
+</script>
+</body>
+</html>
