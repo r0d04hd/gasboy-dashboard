@@ -1471,6 +1471,13 @@ function onMigChange(idx, sel) {
   data[idx].migration = sel.value;
   const s = style(sel.value);
   sel.style.background = s.bg; sel.style.color = s.col;
+  // Auto-rule: Ready to Plan → Walkthrough = Completed
+  if (sel.value === 'Ready to Plan' && data[idx].walkthrough !== 'Completed') {
+    data[idx].walkthrough = 'Completed';
+    updateStats(); applyFilters();
+    toast('✅ ' + (data[idx].dc_location||'row') + ' → Ready to Plan  |  Walk Through auto-set to Completed');
+    return;
+  }
   updateStats();
   toast('✅ ' + (data[idx].dc_location||'row') + ' → ' + sel.value);
 }
