@@ -213,6 +213,31 @@
   <button class="btn btn-primary" onclick="addRow()">Add Row</button>
 </div>
 
+<div class="add-bar" style="border-top:2px dashed #e2e8f0;background:linear-gradient(90deg,#f0fdf4,#f8fafc);">
+  <b style="font-size:.85rem;color:#15803d">✏️ Update:</b>
+  <input id="uNum"  placeholder="DC # (required)" style="width:110px;border-color:#15803d">
+  <select id="uWalk" title="Walk Through">
+    <option value="">-- Walk Through --</option>
+    <option>Completed</option><option>Schedule Walkthrough</option><option>Yet to Start</option>
+  </select>
+  <select id="uElec" title="Electrical">
+    <option value="">-- Electrical --</option>
+    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
+  </select>
+  <select id="uCamb" title="Cambium">
+    <option value="">-- Cambium --</option>
+    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
+  </select>
+  <select id="uMig" title="Migration">
+    <option value="">-- Migration --</option>
+    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
+    <option>Re-structure</option><option>Ready to Plan</option><option>Schedule Walkthrough</option>
+  </select>
+  <input id="uDate" placeholder="Date (mmm-yyyy)" style="width:120px">
+  <input id="uCmt"  placeholder="Comments" style="width:180px">
+  <button class="btn btn-success" onclick="updateRow()">✏️ Update Row</button>
+</div>
+
 <div class="footer">
   ⛽ Gasboy / QuikQ Migration Tracker &nbsp;·&nbsp;
   <span id="rowCount"></span> &nbsp;·&nbsp;
@@ -1495,6 +1520,45 @@ function addRow() {
   document.getElementById('nMig').value='';
   updateStats(); applyFilters();
   toast('✅ Added: '+(loc||num));
+}
+
+function updateRow() {
+  const num  = document.getElementById('uNum').value.trim();
+  const walk = document.getElementById('uWalk').value;
+  const elec = document.getElementById('uElec').value;
+  const camb = document.getElementById('uCamb').value;
+  const mig  = document.getElementById('uMig').value;
+  const dt   = document.getElementById('uDate').value.trim();
+  const cmt  = document.getElementById('uCmt').value.trim();
+  if (!num) { toast('⚠️ Enter a DC # to update'); return; }
+  // Find matching row (by dc_number prefix, case-insensitive)
+  const idx = data.findIndex(r =>
+    (r.dc_number||'').toLowerCase().split('/')[0].trim() === num.toLowerCase() ||
+    (r.dc_number||'').toLowerCase().includes(num.toLowerCase())
+  );
+  if (idx === -1) { toast('⚠️ DC # "' + num + '" not found'); return; }
+  const row = data[idx];
+  const changed = [];
+  if (walk) { row.walkthrough = walk; changed.push('Walk Through → ' + walk); }
+  if (elec) { row.electrical  = elec; changed.push('Electrical → ' + elec); }
+  if (camb) { row.cambium     = camb; changed.push('Cambium → ' + camb); }
+  if (mig)  {
+    row.migration = mig;
+    changed.push('Migration → ' + mig);
+    // Auto-rule: Ready to Plan → Walkthrough = Completed
+    if (mig === 'Ready to Plan' && row.walkthrough !== 'Completed') {
+      row.walkthrough = 'Completed';
+      changed.push('Walk Through auto-set → Completed');
+    }
+  }
+  if (dt)  { row.date     = dt;  changed.push('Date → ' + dt); }
+  if (cmt) { row.comments = cmt; changed.push('Comments updated'); }
+  if (!changed.length) { toast('⚠️ No changes entered'); return; }
+  // Clear update bar
+  ['uNum','uDate','uCmt'].forEach(id => document.getElementById(id).value = '');
+  ['uWalk','uElec','uCamb','uMig'].forEach(id => document.getElementById(id).value = '');
+  updateStats(); applyFilters();
+  toast('✅ ' + (row.dc_location||num) + ': ' + changed.join(' · '));
 }
 
 function delRow(idx) {
