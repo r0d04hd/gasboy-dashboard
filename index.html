@@ -213,30 +213,6 @@
   <button class="btn btn-primary" onclick="addRow()">Add Row</button>
 </div>
 
-<div class="add-bar" style="border-top:2px dashed #e2e8f0;background:linear-gradient(90deg,#f0fdf4,#f8fafc);">
-  <b style="font-size:.85rem;color:#15803d">✏️ Update:</b>
-  <input id="uNum"  placeholder="DC # (required)" style="width:110px;border-color:#15803d">
-  <select id="uWalk" title="Walk Through">
-    <option value="">-- Walk Through --</option>
-    <option>Completed</option><option>Schedule Walkthrough</option><option>Yet to Start</option>
-  </select>
-  <select id="uElec" title="Electrical">
-    <option value="">-- Electrical --</option>
-    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
-  </select>
-  <select id="uCamb" title="Cambium">
-    <option value="">-- Cambium --</option>
-    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
-  </select>
-  <select id="uMig" title="Migration">
-    <option value="">-- Migration --</option>
-    <option>Completed</option><option>In Progress</option><option>Yet to Start</option>
-    <option>Re-structure</option><option>Ready to Plan</option><option>Schedule Walkthrough</option>
-  </select>
-  <input id="uDate" placeholder="Date (mmm-yyyy)" style="width:120px">
-  <input id="uCmt"  placeholder="Comments" style="width:180px">
-  <button class="btn btn-success" onclick="updateRow()">✏️ Update Row</button>
-</div>
 
 <div class="footer">
   ⛽ Gasboy / QuikQ Migration Tracker &nbsp;·&nbsp;
@@ -1522,15 +1498,6 @@ function addRow() {
   toast('✅ Added: '+(loc||num));
 }
 
-function updateRow() {
-  const q    = document.getElementById('uNum').value.trim().toLowerCase();
-  const walk = document.getElementById('uWalk').value;
-  const elec = document.getElementById('uElec').value;
-  const camb = document.getElementById('uCamb').value;
-  const mig  = document.getElementById('uMig').value;
-  const dt   = document.getElementById('uDate').value.trim();
-  const cmt  = document.getElementById('uCmt').value.trim();
-  if (!q) { toast('⚠️ Enter a DC # or Location to update'); return; }
 
   // Search by DC # or location (partial, case-insensitive)
   const idx = data.findIndex(r =>
@@ -1556,35 +1523,7 @@ function updateRow() {
   if (dt)  { row.date     = dt;  changed.push('Date → ' + dt); }
   if (cmt) { row.comments = cmt; changed.push('Comments updated'); }
 
-  if (!changed.length) { toast('⚠️ Select at least one field to update'); return; }
 
-  // Clear update bar
-  ['uNum','uDate','uCmt'].forEach(id => document.getElementById(id).value = '');
-  ['uWalk','uElec','uCamb','uMig'].forEach(id => document.getElementById(id).value = '');
-
-  // Clear filters so updated row is always visible, then re-render all
-  document.getElementById('qSearch').value = '';
-  document.getElementById('fMig').value    = '';
-  document.getElementById('fCab').value    = '';
-  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-
-  updateStats();
-  render(data);   // full re-render so updated row is always visible
-
-  // Scroll to and briefly highlight the updated row
-  setTimeout(() => {
-    const rows = document.querySelectorAll('#tBody tr');
-    const target = rows[idx];
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      target.style.transition = 'background 0.3s';
-      target.style.background = '#fef9c3';
-      setTimeout(() => { target.style.background = ''; }, 2000);
-    }
-  }, 80);
-
-  toast('✅ ' + (row.dc_location || q) + ': ' + changed.join(' · '));
-}
 
 function delRow(idx) {
   const name=data[idx].dc_location||data[idx].dc_number||'row';
