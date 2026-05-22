@@ -1605,11 +1605,8 @@ function toast(msg) {
 }
 
 // ─── INIT ──────────────────────────────────────────────────────────────────
-localStorage.removeItem('gasboy_v3'); // clear old version
-try {
-  const saved=localStorage.getItem('gasboy_v4');
-  if(saved){ const p=JSON.parse(saved); if(p&&p.length>0) data=p; }
-} catch(e){}
+localStorage.removeItem('gasboy_v3'); // clear old versions
+localStorage.removeItem('gasboy_v4'); // clear — was corrupted by sync bug
 updateStats(); render(data);
 </script>
 </body>
