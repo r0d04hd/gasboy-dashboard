@@ -1304,3 +1304,313 @@ let data = [
         "notes": "Site should not need Cambium because conduit will be ran with the remodel."
     }
 ];
+
+// ─── STATUS HELPERS ────────────────────────────────────────────────────────
+const CLS = {
+  Completed:   { cls:'b-completed',  bg:'#dcfce7', col:'#15803d' },
+  'In Progress':{ cls:'b-inprogress', bg:'#fef9c3', col:'#854d0e' },
+  'Yet to Start':          { cls:'b-blocked',    bg:'#fee2e2', col:'#991b1b' },
+  'Re-structure':          { cls:'b-pending',    bg:'#f1f5f9', col:'#475569' },
+  'Ready to Plan':         { cls:'b-planned',    bg:'#dbeafe', col:'#1d4ed8' },
+  'Schedule Walkthrough':  { cls:'b-sched',      bg:'#cffafe', col:'#0e7490' },
+};
+const MIG_OPTS = ['Completed','In Progress','Yet to Start','Re-structure','Ready to Plan','Schedule Walkthrough'];
+
+function style(val) {
+  return CLS[val] || { cls:'b-empty', bg:'#f8fafc', col:'#94a3b8' };
+}
+
+function cabCls(val) {
+  if (!val) return 'b-empty';
+  const v = val.toLowerCase();
+  if (v === 'completed') return 'b-completed';
+  if (v.includes('partial') || v.includes('progress')) return 'b-inprogress';
+  if (v.includes('block') || v.includes('crush') || v.includes('unable') ||
+      v.includes('conduit') || v.includes('weld') || v.includes('650') ||
+      v.includes('too much') || v.includes('no room') || v.includes('built') ||
+      v.includes('junction') || v.includes('unreachable') || v.includes('wall'))
+    return 'b-blocked';
+  if (v.includes('schedul') || v.includes('plan')) return 'b-planned';
+  return 'b-inprogress';
+}
+
+function migSelect(val, idx) {
+  const s = style(val);
+  const opts = MIG_OPTS.map(o =>
+    `<option value="${o}"${val===o?' selected':''}>${o}</option>`
+  ).join('');
+  return `<select class="mig-select" style="background:${s.bg};color:${s.col};"
+    onchange="onMigChange(${idx},this)">${opts}</select>`;
+}
+
+function cabBadge(val) {
+  const cls = cabCls(val);
+  const label = val || '—';
+  const display = label.length > 36 ? label.slice(0,36)+'…' : label;
+  return `<span class="badge ${cls}" title="${label.replace(/"/g,'&quot;')}">${display}</span>`;
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+function render(list) {
+  const tb = document.getElementById('tBody');
+  if (!list.length) {
+    tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:40px;color:#94a3b8">No results found</td></tr>';
+    document.getElementById('rowCount').textContent='0 sites';
+    return;
+  }
+  tb.innerHTML = list.map(row => {
+    const i = data.indexOf(row);
+    return `<tr>
+      <td><input type="checkbox" ${row._sel?'checked':''} onchange="data[${i}]._sel=this.checked"></td>
+      <td class="loc" contenteditable onblur="setCell(${i},'dc_location',this)">${esc(row.dc_location)}</td>
+      <td class="num" contenteditable onblur="setCell(${i},'dc_number',this)">${esc(row.dc_number)}</td>
+      <td style="max-width:220px">${cabBadge(row.cabling)}</td>
+      <td>${cabBadge(row.walkthrough)}</td>
+      <td>${cabBadge(row.electrical)}</td>
+      <td>${cabBadge(row.cambium)}</td>
+      <td>${migSelect(row.migration, i)}</td>
+      <td class="date-col" contenteditable onblur="setCell(${i},'date',this)">${esc(row.date)}</td>
+      <td contenteditable style="min-width:130px;max-width:220px" onblur="setCell(${i},'comments',this)">${esc(row.comments)}</td>
+      <td style="text-align:center"><a href="${`https://confluence.walmart.com/display/WTMS/Gasboy+QuikQ+Migration#GasboyQuikQMigration-DC-${row.dc_number.split('/')[0].trim()}`}" target="_blank" title="View DC ${row.dc_number} in Confluence" style="text-decoration:none;font-size:1rem;">📋</a></td>
+      <td><div class="row-actions"><button class="del-btn" onclick="delRow(${i})">🗑</button></div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rowCount').textContent = `${list.length} of ${data.length} sites`;
+}
+
+// ─── STATS ─────────────────────────────────────────────────────────────────
+function updateStats() {
+  const t = data.length;
+  const d = data.filter(r=>r.migration==='Completed').length;
+  const p = data.filter(r=>r.migration==='Ready to Plan').length;
+  const b  = data.filter(r=>r.migration==='Yet to Start').length;
+  const n  = data.filter(r=>r.migration==='Re-structure'||!r.migration).length;
+  const sw = data.filter(r=>r.migration==='Schedule Walkthrough').length;
+  document.getElementById('sTotal').textContent    = t;
+  document.getElementById('sDone').textContent     = d;
+  document.getElementById('sInProg').textContent   = p;
+  document.getElementById('sBlocked').textContent  = b;
+  document.getElementById('sPending').textContent  = n;
+  document.getElementById('sSchedWalk').textContent = sw;
+  const pct = t ? Math.round(d/t*100) : 0;
+  document.getElementById('pPct').textContent = pct+'%';
+  document.getElementById('pBar').style.width = pct+'%';
+
+  // Cambium progress — Cambium sites = comments==='Cambium', Completed = cambium==='Completed'
+  const cambiumTotal     = data.filter(r=>r.comments==='Cambium').length;
+  const cambiumCompleted = data.filter(r=>r.comments==='Cambium' && r.cambium==='Completed').length;
+  const cPct = cambiumTotal ? Math.round(cambiumCompleted/cambiumTotal*100) : 0;
+  document.getElementById('cPct').textContent = cPct+'%';
+  document.getElementById('cBar').style.width = cPct+'%';
+}
+
+// ─── FILTER ────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q   = document.getElementById('qSearch').value.toLowerCase();
+  const mig = document.getElementById('fMig').value;
+  const cab = document.getElementById('fCab').value.toLowerCase();
+  render(data.filter(r => {
+    const mq = !q ||
+      (r.dc_location||'').toLowerCase().includes(q) ||
+      (r.dc_number||'').toLowerCase().includes(q)   ||
+      (r.migration||'').toLowerCase().includes(q)   ||
+      (r.cabling||'').toLowerCase().includes(q)     ||
+      (r.date||'').toLowerCase().includes(q)        ||
+      (r.comments||'').toLowerCase().includes(q);
+    const mm = !mig || r.migration === mig;
+    const mc = !cab || (r.cabling||'').toLowerCase().includes(cab);
+    return mq && mm && mc;
+  }));
+}
+
+function clearFilters() {
+  ['qSearch'].forEach(id=>document.getElementById(id).value='');
+  ['fMig','fCab'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  render(data);
+}
+
+function filterByStatus(status) {
+  document.getElementById('qSearch').value = '';
+  document.getElementById('fCab').value = '';
+  document.getElementById('fMig').value = status;
+  // Highlight the active card
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  if(status) event.currentTarget.classList.add('active');
+  applyFilters();
+}
+
+// ─── SORT ──────────────────────────────────────────────────────────────────
+let _sortKey=null, _sortAsc=true;
+function sortBy(key) {
+  document.querySelectorAll('thead th').forEach(th=>th.classList.remove('asc','desc'));
+  _sortAsc = _sortKey===key ? !_sortAsc : true;
+  _sortKey = key;
+  const keyMap=[null,'dc_location','dc_number','cabling','walkthrough','electrical','cambium','migration','date','comments'];
+  const idx=keyMap.indexOf(key);
+  if(idx>-1) document.querySelectorAll('thead th')[idx].classList.add(_sortAsc?'asc':'desc');
+  data.sort((a,b)=>{
+    const av=(a[key]||'').toString().toLowerCase();
+    const bv=(b[key]||'').toString().toLowerCase();
+    return _sortAsc?av.localeCompare(bv):bv.localeCompare(av);
+  });
+  applyFilters();
+}
+
+// ─── EDIT ──────────────────────────────────────────────────────────────────
+function setCell(idx, field, el) {
+  data[idx][field] = el.innerText.trim();
+  updateStats();
+  autoSave();
+  toast('✏️ Updated ' + (data[idx].dc_location||'row'));
+}
+
+function onMigChange(idx, sel) {
+  data[idx].migration = sel.value;
+  const s = style(sel.value);
+  sel.style.background = s.bg; sel.style.color = s.col;
+  // Auto-rule: Ready to Plan → Walkthrough = Completed
+  if (sel.value === 'Ready to Plan' && data[idx].walkthrough !== 'Completed') {
+    data[idx].walkthrough = 'Completed';
+    updateStats(); applyFilters();
+    autoSave();
+    toast('✅ ' + (data[idx].dc_location||'row') + ' → Ready to Plan  |  Walk Through auto-set to Completed');
+    return;
+  }
+  updateStats();
+  autoSave();
+  toast('✅ ' + (data[idx].dc_location||'row') + ' → ' + sel.value);
+}
+
+// ─── ADD / DELETE ──────────────────────────────────────────────────────────
+function addRow() {
+  const loc=document.getElementById('nLoc').value.trim();
+  const num=document.getElementById('nNum').value.trim();
+  const mig=document.getElementById('nMig').value;
+  const dt =document.getElementById('nDate').value.trim();
+  const cmt=document.getElementById('nCmt').value.trim();
+  if(!loc&&!num){ toast('⚠️ Enter DC Location or Number'); return; }
+  data.unshift({dc_location:loc,dc_number:num,cabling:'',walkthrough:'',electrical:'',cambium:'',migration:mig,date:dt,comments:cmt,notes:''});
+  ['nLoc','nNum','nDate','nCmt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nMig').value='';
+  updateStats(); applyFilters();
+  toast('✅ Added: '+(loc||num));
+}
+
+function updateRow() {
+  const q    = document.getElementById('uNum').value.trim().toLowerCase();
+  const walk = document.getElementById('uWalk').value;
+  const elec = document.getElementById('uElec').value;
+  const camb = document.getElementById('uCamb').value;
+  const mig  = document.getElementById('uMig').value;
+  const dt   = document.getElementById('uDate').value.trim();
+  const cmt  = document.getElementById('uCmt').value.trim();
+  if (!q) { toast('⚠️ Enter a DC # or Location to update'); return; }
+
+  // Search by DC # or location (partial, case-insensitive)
+  const idx = data.findIndex(r =>
+    (r.dc_number||'').toLowerCase().includes(q) ||
+    (r.dc_location||'').toLowerCase().includes(q)
+  );
+  if (idx === -1) { toast('⚠️ "' + q + '" not found in dashboard'); return; }
+
+  const row = data[idx];
+  const changed = [];
+
+  if (walk) { row.walkthrough = walk; changed.push('Walk Through → ' + walk); }
+  if (elec) { row.electrical  = elec; changed.push('Electrical → ' + elec); }
+  if (camb) { row.cambium     = camb; changed.push('Cambium → ' + camb); }
+  if (mig)  {
+    row.migration = mig;
+    changed.push('Migration → ' + mig);
+    if (mig === 'Ready to Plan' && row.walkthrough !== 'Completed') {
+      row.walkthrough = 'Completed';
+      changed.push('Walk Through auto-set → Completed');
+    }
+  }
+  if (dt)  { row.date     = dt;  changed.push('Date → ' + dt); }
+  if (cmt) { row.comments = cmt; changed.push('Comments updated'); }
+
+  if (!changed.length) { toast('⚠️ Select at least one field to update'); return; }
+
+  // Clear update bar
+  ['uNum','uDate','uCmt'].forEach(id => document.getElementById(id).value = '');
+  ['uWalk','uElec','uCamb','uMig'].forEach(id => document.getElementById(id).value = '');
+
+  // Clear filters so updated row is always visible, then re-render all
+  document.getElementById('qSearch').value = '';
+  document.getElementById('fMig').value    = '';
+  document.getElementById('fCab').value    = '';
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+
+  updateStats();
+  autoSave();
+  render(data);   // full re-render so updated row is always visible
+
+  // Scroll to and briefly highlight the updated row
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#tBody tr');
+    const target = rows[idx];
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.style.transition = 'background 0.3s';
+      target.style.background = '#fef9c3';
+      setTimeout(() => { target.style.background = ''; }, 2000);
+    }
+  }, 80);
+
+  toast('✅ ' + (row.dc_location || q) + ': ' + changed.join(' · '));
+}
+
+function delRow(idx) {
+  const name=data[idx].dc_location||data[idx].dc_number||'row';
+  if(!confirm(`Delete "${name}"?`))return;
+  data.splice(idx,1); updateStats(); applyFilters();
+  toast('🗑 Deleted: '+name);
+}
+
+function toggleAll(cb) { data.forEach(r=>r._sel=cb.checked); applyFilters(); }
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const H=['DC Location','DC Number','Cabling','Walk Through','Electrical','Cambium','Migration','Date','Comments'];
+  const K=['dc_location','dc_number','cabling','walkthrough','electrical','cambium','migration','date','comments'];
+  const csv=[H.join(','),...data.map(r=>K.map(k=>`"${(r[k]||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='Gasboy_Migration_Export.csv'; a.click();
+  toast('⬇️ CSV exported');
+}
+
+// ─── SAVE ──────────────────────────────────────────────────────────────────
+function autoSave() {
+  localStorage.setItem('gasboy_v4', JSON.stringify(data));
+}
+
+function saveLocal() {
+  autoSave();
+  toast('💾 Saved to browser storage');
+}
+
+// ─── TOAST ─────────────────────────────────────────────────────────────────
+let _tt;
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+localStorage.removeItem('gasboy_v3'); // clear old version
+try {
+  const saved=localStorage.getItem('gasboy_v4');
+  if(saved){ const p=JSON.parse(saved); if(p&&p.length>0) data=p; }
+} catch(e){}
+updateStats(); render(data);
+</script>
+</body>
+</html>
